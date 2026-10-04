@@ -4,9 +4,8 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-/* Preferences.framework 私有接口（手写用到的部分） */
+/* Preferences.framework 私有接口 */
 @interface PSListController : UIViewController
-- (NSArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
 @end
 
 @interface PSSpecifier : NSObject
@@ -19,16 +18,6 @@
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
 #define OC_DEBUG_FILE @"/var/mobile/Documents/oc-prefs-debug.txt"
-
-/* 配置变量（与 tweak 共用同一份 plist） */
-static BOOL  cfg_enabled   = YES;
-static int   cfg_mode      = 0;
-static BOOL  cfg_repeat    = NO;
-static int   cfg_window    = 180;
-static int   cfg_minmatch  = 7;
-static BOOL  cfg_noid      = YES;
-static BOOL  cfg_restrict  = YES;
-static BOOL  cfg_log       = YES;
 
 #pragma mark - jbroot
 
@@ -53,6 +42,8 @@ static NSString *OCPJbRoot(void)
     });
     return jb;
 }
+
+#pragma mark - 配置读写
 
 static NSArray *OCCandidates(void)
 {
@@ -87,112 +78,6 @@ static void OCSaveDict(NSMutableDictionary *d)
             return;
         }
     }
-}
-
-static id OCCfg(NSString *key, id def)
-{
-    id v = OCLoadDict()[key];
-    return v ?: def;
-}
-
-static void OCSet(NSString *key, id v)
-{
-    NSMutableDictionary *d = OCLoadDict();
-    d[key] = v;
-    OCSaveDict(d);
-}
-
-static void OCDebug(NSString *fmt, ...)
-{
-    va_list ap; va_start(ap, fmt);
-    NSString *body = [[NSString alloc] initWithFormat:fmt arguments:ap];
-    va_end(ap);
-    NSMutableString *all = [NSMutableString stringWithContentsOfFile:OC_DEBUG_FILE
-                                                            encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-    [all appendFormat:@"%@|%@\n",
-        [[NSDateFormatter alloc] init].dateFormat ?: @"",
-        body];
-    /* 简单格式 */
-    NSString *ts = [NSString stringWithFormat:@"%@",
-                    [NSDate date]];
-    NSString *out = [NSString stringWithFormat:@"%@ | %@\n", ts, body];
-    NSMutableString *content = [NSMutableString stringWithContentsOfFile:OC_DEBUG_FILE
-                                                                encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-    [content appendFormat:@"%@\n", out];
-    [content writeToFile:OC_DEBUG_FILE atomically:YES encoding:NSUTF8StringEncoding error:nil];
-}
-
-#pragma mark - 配置读写（jbroot 感知）
-
-static NSString *OCPJbRoot(void)
-{
-    static NSString *jb = nil;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        uint32_t n = _dyld_image_count();
-        for (uint32_t i = 0; i < n; i++) {
-            const char *p = _dyld_get_image_name(i);
-            if (!p) continue;
-            NSString *path = [NSString stringWithUTF8String:p];
-            NSRange r = [path rangeOfString:@"/.jbroot-"];
-            if (r.location == NSNotFound) continue;
-            NSRange rest = NSMakeRange(r.location + 1, path.length - r.location - 1);
-            NSRange slash = [path rangeOfString:@"/" options:0 range:rest];
-            jb = (slash.location == NSNotFound) ? path
-                  : [path substringToIndex:slash.location];
-            break;
-        }
-    });
-    return jb;
-}
-
-static NSArray *OCCandidates(void)
-{
-    NSString *jb = OCPJbRoot();
-    NSString *rel = @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist";
-    NSMutableArray *a = [NSMutableArray array];
-    if (jb.length) {
-        [a addObject:[jb stringByAppendingString:@"/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
-        [a addObject:[jb stringByAppendingString:@"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
-    }
-    [a addObject:rel];
-    return a;
-}
-
-static NSMutableDictionary *OCLoadDict(void)
-{
-    for (NSString *p in OCCandidates()) {
-        NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:p];
-        if (d.count) return [d mutableCopy];
-    }
-    return [NSMutableDictionary new];
-}
-
-static NSString *OCSaveDict(NSMutableDictionary *d)
-{
-    for (NSString *p in OCCandidates()) {
-        [[NSFileManager defaultManager] createDirectoryAtPath:[p stringByDeletingLastPathComponent]
-                                  withIntermediateDirectories:YES attributes:nil error:nil];
-        if ([NSFileManager.defaultManager isWritableFileAtPath:[p stringByDeletingLastPathComponent]]) {
-            [d writeToFile:p atomically:YES];
-            chown(p.UTF8String, 501, 501);
-            return p;
-        }
-    }
-    return nil;
-}
-
-static id OCCfg(NSString *key, id def)
-{
-    id v = OCLoadDict()[key];
-    return v ?: def;
-}
-
-static void OCSet(NSString *key, id v)
-{
-    NSMutableDictionary *d = OCLoadDict();
-    d[key] = v;
-    OCSaveDict(d);
 }
 
 #pragma mark - 面板控制器
@@ -232,16 +117,12 @@ static void OCSet(NSString *key, id v)
 
 - (NSArray *)specifiers
 {
-    OCDebug(@"-specifiers called, self=%@ class=%@", self, NSStringFromClass([self class]));
-
     NSMutableArray *specs = [NSMutableArray array];
     Class PSSpec  = objc_getClass("PSSpecifier");
     Class PSGroup = objc_getClass("PSGroupCell");
     Class PSSw    = objc_getClass("PSSwitchCell");
     Class PSEd    = objc_getClass("PSEditTextCell");
     Class PSLL    = objc_getClass("PSLinkListCell");
-    OCDebug(@"classes: PSSpec=%@ PSGroup=%@ PSSw=%@ PSEd=%@ PSLL=%@",
-            PSSpec, PSGroup, PSSw, PSEd, PSLL);
     if (!PSSpec || !PSGroup || !PSSw) return specs;
 
     SEL named = NSSelectorFromString(@"preferenceSpecifierNamed:target:set:get:detail:cell:edit:");
@@ -252,7 +133,6 @@ static void OCSet(NSString *key, id v)
 
     /* ===== 来电 ===== */
     [specs addObject:((id (*)(id, SEL, id))objc_msgSend)(PSSpec, grp, @"来电")];
-
     [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
         PSSpec, named, @"只允许通讯录来电", self, set, get, (id)nil, PSSw, (id)nil)];
 
@@ -284,7 +164,6 @@ static void OCSet(NSString *key, id v)
     [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
         PSSpec, named, @"写决策日志", self, set, get, (id)nil, PSSw, (id)nil)];
 
-    OCDebug(@"-specifiers returning %lu items", (unsigned long)specs.count);
     return specs;
 }
 
