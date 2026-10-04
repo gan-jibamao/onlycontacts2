@@ -3,6 +3,7 @@
 
 /* Preferences.framework 私有头（theos 不带，手写用到的部分） */
 @interface PSListController : UIViewController
+- (NSArray *)specifiers;
 - (NSArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
 @end
 
