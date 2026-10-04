@@ -1,11 +1,11 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import <dlfcn.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
 /* Preferences.framework 私有接口（手写用到的部分） */
 @interface PSListController : UIViewController
+- (NSArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
 @end
 
 @interface PSSpecifier : NSObject
@@ -16,23 +16,40 @@
 @end
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
+#define OC_DEBUG_FILE @"/var/mobile/Documents/oc-prefs-debug.txt"
 
-#pragma mark - jbroot
+static void OCDebug(NSString *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    NSString *body = [[NSString alloc] initWithFormat:fmt arguments:ap];
+    va_end(ap);
+    NSString *line = [NSString stringWithFormat:@"[%@] %@\n",
+                      [NSDateFormatter new].dateFormat ?: @"", body];
+    NSMutableString *all = [NSMutableString stringWithContentsOfFile:OC_DEBUG_FILE
+                                                            encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+    [all appendFormat:@"%@|%@\n",
+        [[NSDateFormatter alloc] init].dateFormat ?: @"",
+        body];
+    /* 简单格式 */
+    NSString *ts = [NSString stringWithFormat:@"%@",
+                    [NSDate date]];
+    NSString *out = [NSString stringWithFormat:@"%@ | %@\n", ts, body];
+    NSMutableString *content = [NSMutableString stringWithContentsOfFile:OC_DEBUG_FILE
+                                                                encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+    [content appendFormat:@"%@\n", out];
+    [content writeToFile:OC_DEBUG_FILE atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+#pragma mark - 配置读写（jbroot 感知）
 
 static NSString *OCPJbRoot(void)
 {
     static NSString *jb = nil;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        void *h = dlopen("/usr/lib/system/libdyld.dylib", RTLD_NOW);
-        if (!h) h = dlopen(NULL, RTLD_NOW);
-        if (!h) return;
-        unsigned (*cnt)(void) = (unsigned (*)(void))dlsym(h, "_dyld_image_count");
-        const char *(*nm)(unsigned) = (const char *(*)(unsigned))dlsym(h, "_dyld_get_image_name");
-        if (!cnt || !nm) return;
-        uint32_t n = cnt();
+        uint32_t n = _dyld_image_count();
         for (uint32_t i = 0; i < n; i++) {
-            const char *p = nm(i);
+            const char *p = _dyld_get_image_name(i);
             if (!p) continue;
             NSString *path = [NSString stringWithUTF8String:p];
             NSRange r = [path rangeOfString:@"/.jbroot-"];
@@ -46,8 +63,6 @@ static NSString *OCPJbRoot(void)
     });
     return jb;
 }
-
-#pragma mark - 配置读写（jbroot 感知，与插件共用同一份）
 
 static NSArray *OCCandidates(void)
 {
@@ -105,8 +120,6 @@ static void OCSet(NSString *key, id v)
 
 @implementation OCRootListController
 
-/* 面板值直接读写配置文件（不走 defaults 域，保证和插件看到的是同一份） */
-
 - (id)valueForSpecifier:(PSSpecifier *)spec
 {
     NSString *key = [spec propertyForKey:@"key"];
@@ -132,44 +145,37 @@ static void OCSet(NSString *key, id v)
     else if ([key isEqualToString:@"allow_unknown_id"]) cfg_noid = [value boolValue];
     else if ([key isEqualToString:@"restrict_gate"]) cfg_restrict = [value boolValue];
     else if ([key isEqualToString:@"log"])           cfg_log      = [value boolValue];
-    else return;
-
     OCSet(key, value);
 }
 
 - (NSArray *)specifiers
 {
+    OCDebug(@"-specifiers called, self=%@ class=%@", self, NSStringFromClass([self class]));
+
     NSMutableArray *specs = [NSMutableArray array];
     Class PSSpec  = objc_getClass("PSSpecifier");
     Class PSGroup = objc_getClass("PSGroupCell");
     Class PSSw    = objc_getClass("PSSwitchCell");
     Class PSEd    = objc_getClass("PSEditTextCell");
     Class PSLL    = objc_getClass("PSLinkListCell");
+    OCDebug(@"classes: PSSpec=%@ PSGroup=%@ PSSw=%@ PSEd=%@ PSLL=%@",
+            PSSpec, PSGroup, PSSw, PSEd, PSLL);
     if (!PSSpec || !PSGroup || !PSSw) return specs;
 
     SEL named = NSSelectorFromString(@"preferenceSpecifierNamed:target:set:get:detail:cell:edit:");
     SEL grp   = NSSelectorFromString(@"groupSpecifierWithName:");
     SEL prop  = NSSelectorFromString(@"setProperty:forKey:");
-
-    #define ADDSPEC(name_, cell_, key_) \
-        id s_ = ((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)( \
-            PSSpec, named, name_, self, \
-            NSSelectorFromString(@"setValue:forSpecifier:"), \
-            NSSelectorFromString(@"valueForSpecifier:"), \
-            (id)nil, cell_, (id)nil); \
-        ((void (*)(id, SEL, id, id))objc_msgSend)(s_, prop, key_, @"key"); \
-        [specs addObject:s_];
+    SEL set   = NSSelectorFromString(@"setValue:forSpecifier:");
+    SEL get   = NSSelectorFromString(@"valueForSpecifier:");
 
     /* ===== 来电 ===== */
     [specs addObject:((id (*)(id, SEL, id))objc_msgSend)(PSSpec, grp, @"来电")];
 
-    ADDSPEC(@"只允许通讯录来电", PSSw, @"enabled")
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"只允许通讯录来电", self, set, get, (id)nil, PSSw, (id)nil)];
 
     id mode = ((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
-        PSSpec, named, @"拦截方式", self,
-        NSSelectorFromString(@"setValue:forSpecifier:"),
-        NSSelectorFromString(@"valueForSpecifier:"), (id)nil, PSLL, (id)nil);
-    ((void (*)(id, SEL, id, id))objc_msgSend)(mode, prop, @"mode", @"key");
+        PSSpec, named, @"拦截方式", self, set, get, (id)nil, PSLL, (id)nil);
     ((void (*)(id, SEL, id, id))objc_msgSend)(mode, prop,
         [NSArray arrayWithObjects:@0, @1, nil], @"validValues");
     ((void (*)(id, SEL, id, id))objc_msgSend)(mode, prop,
@@ -179,17 +185,24 @@ static void OCSet(NSString *key, id v)
     /* ===== 例外的放行 ===== */
     [specs addObject:((id (*)(id, SEL, id))objc_msgSend)(PSSpec, grp, @"例外的放行")];
 
-    ADDSPEC(@"连打两次放行", PSSw, @"allow_repeat")
-    ADDSPEC(@"放行窗口（秒）", PSEd ?: PSSw, @"repeat_window")
-    ADDSPEC(@"尾号匹配位数", PSEd ?: PSSw, @"min_match")
-    ADDSPEC(@"隐号/无号码时放行", PSSw, @"allow_unknown_id")
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"连打两次放行", self, set, get, (id)nil, PSSw, (id)nil)];
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"放行窗口（秒）", self, set, get, (id)nil, PSEd ?: PSSw, (id)nil)];
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"尾号匹配位数", self, set, get, (id)nil, PSEd ?: PSSw, (id)nil)];
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"隐号/无号码时放行", self, set, get, (id)nil, PSSw, (id)nil)];
 
     /* ===== 高级 ===== */
     [specs addObject:((id (*)(id, SEL, id))objc_msgSend)(PSSpec, grp, @"高级")];
 
-    ADDSPEC(@"真的拒接（对方听忙音）", PSSw, @"restrict_gate")
-    ADDSPEC(@"写决策日志", PSSw, @"log")
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"真的拒接（对方听忙音）", self, set, get, (id)nil, PSSw, (id)nil)];
+    [specs addObject:((id (*)(id, SEL, NSString *, id, SEL, SEL, id, id, id))objc_msgSend)(
+        PSSpec, named, @"写决策日志", self, set, get, (id)nil, PSSw, (id)nil)];
 
+    OCDebug(@"-specifiers returning %lu items", (unsigned long)specs.count);
     return specs;
 }
 
