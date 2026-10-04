@@ -20,6 +20,88 @@
 #define OC_DOMAIN @"com.rna.onlycontacts"
 #define OC_DEBUG_FILE @"/var/mobile/Documents/oc-prefs-debug.txt"
 
+/* 配置变量（与 tweak 共用同一份 plist） */
+static BOOL  cfg_enabled   = YES;
+static int   cfg_mode      = 0;
+static BOOL  cfg_repeat    = NO;
+static int   cfg_window    = 180;
+static int   cfg_minmatch  = 7;
+static BOOL  cfg_noid      = YES;
+static BOOL  cfg_restrict  = YES;
+static BOOL  cfg_log       = YES;
+
+#pragma mark - jbroot
+
+static NSString *OCPJbRoot(void)
+{
+    static NSString *jb = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        uint32_t n = _dyld_image_count();
+        for (uint32_t i = 0; i < n; i++) {
+            const char *p = _dyld_get_image_name(i);
+            if (!p) continue;
+            NSString *path = [NSString stringWithUTF8String:p];
+            NSRange r = [path rangeOfString:@"/.jbroot-"];
+            if (r.location == NSNotFound) continue;
+            NSRange rest = NSMakeRange(r.location + 1, path.length - r.location - 1);
+            NSRange slash = [path rangeOfString:@"/" options:0 range:rest];
+            jb = (slash.location == NSNotFound) ? path
+                  : [path substringToIndex:slash.location];
+            break;
+        }
+    });
+    return jb;
+}
+
+static NSArray *OCCandidates(void)
+{
+    NSString *jb = OCPJbRoot();
+    NSString *rel = @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist";
+    NSMutableArray *a = [NSMutableArray array];
+    if (jb.length) {
+        [a addObject:[jb stringByAppendingString:@"/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
+        [a addObject:[jb stringByAppendingString:@"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
+    }
+    [a addObject:rel];
+    return a;
+}
+
+static NSMutableDictionary *OCLoadDict(void)
+{
+    for (NSString *p in OCCandidates()) {
+        NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:p];
+        if (d.count) return [d mutableCopy];
+    }
+    return [NSMutableDictionary new];
+}
+
+static void OCSaveDict(NSMutableDictionary *d)
+{
+    for (NSString *p in OCCandidates()) {
+        [[NSFileManager defaultManager] createDirectoryAtPath:[p stringByDeletingLastPathComponent]
+                                  withIntermediateDirectories:YES attributes:nil error:nil];
+        if ([NSFileManager.defaultManager isWritableFileAtPath:[p stringByDeletingLastPathComponent]]) {
+            [d writeToFile:p atomically:YES];
+            chown(p.UTF8String, 501, 501);
+            return;
+        }
+    }
+}
+
+static id OCCfg(NSString *key, id def)
+{
+    id v = OCLoadDict()[key];
+    return v ?: def;
+}
+
+static void OCSet(NSString *key, id v)
+{
+    NSMutableDictionary *d = OCLoadDict();
+    d[key] = v;
+    OCSaveDict(d);
+}
+
 static void OCDebug(NSString *fmt, ...)
 {
     va_list ap; va_start(ap, fmt);
