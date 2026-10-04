@@ -10,3 +10,6 @@ OnlyContacts_FRAMEWORKS = Foundation
 OnlyContacts_LIBRARIES = sqlite3
 
 include $(THEOS_MAKE_PATH)/tweak.mk
+
+SUBPROJECTS += prefs
+include $(THEOS_MAKE_PATH)/aggregate.mk

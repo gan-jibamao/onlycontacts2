@@ -4,6 +4,8 @@
 <dict>
 	<key>entry</key>
 	<dict>
+		<key>bundle</key>
+		<string>OnlyContactsPrefs</string>
 		<key>cell</key>
 		<string>PSLinkCell</string>
 		<key>icon</key>
