@@ -1,0 +1,8 @@
+BUNDLE_NAME = OnlyContactsPrefs
+OnlyContactsPrefs_FILES = OCRootListController.m
+OnlyContactsPrefs_CFLAGS = -fobjc-arc
+OnlyContactsPrefs_FRAMEWORKS = Foundation UIKit
+OnlyContactsPrefs_PRIVATE_FRAMEWORKS = Preferences
+OnlyContactsPrefs_INSTALL_PATH = /Library/PreferenceBundles
+
+include $(THEOS_MAKE_PATH)/bundle.mk
