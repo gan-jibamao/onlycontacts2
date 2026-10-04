@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <mach-o/dyld.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -13,6 +14,7 @@
 + (id)preferenceSpecifierNamed:(NSString *)name target:(id)target
         set:(SEL)set get:(SEL)get detail:(id)detail cell:(id)cell edit:(id)edit;
 - (void)setProperty:(id)property forKey:(NSString *)key;
+- (id)propertyForKey:(NSString *)key;
 @end
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
@@ -23,8 +25,6 @@ static void OCDebug(NSString *fmt, ...)
     va_list ap; va_start(ap, fmt);
     NSString *body = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    NSString *line = [NSString stringWithFormat:@"[%@] %@\n",
-                      [NSDateFormatter new].dateFormat ?: @"", body];
     NSMutableString *all = [NSMutableString stringWithContentsOfFile:OC_DEBUG_FILE
                                                             encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
     [all appendFormat:@"%@|%@\n",
