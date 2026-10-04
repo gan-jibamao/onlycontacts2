@@ -1,6 +1,8 @@
 #import <Foundation/Foundation.h>
 #import <sqlite3.h>
 #import <dlfcn.h>
+#import <mach-o/dyld.h>
+#import <objc/message.h>
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
 
@@ -229,9 +231,10 @@ static void OCLog(NSString *fmt, ...)
 /* 系统自己的通讯录匹配：过滤器链里的 CSDContactsCallFilter -isUnknownCall: */
 static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
 {
+    SEL sel = NSSelectorFromString(@"isUnknownCall:");
     for (id f in controller.filters)
-        if ([f respondsToSelector:@selector(isUnknownCall:)])
-            return [f isUnknownCall:call];
+        if ([f respondsToSelector:sel])
+            return ((BOOL (*)(id, SEL, id))objc_msgSend)(f, sel, call);
     return NO;   /* 问不到就当已知，交给白名单兜底 */
 }
 
