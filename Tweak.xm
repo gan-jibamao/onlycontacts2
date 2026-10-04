@@ -106,11 +106,6 @@ static NSString *OCDigits(NSString *in)
     return out;
 }
 
-static BOOL OCIsShortCode(NSString *d)
-{
-    return d.length <= 5;        /* 短号/急呼一律放行 */
-}
-
 /* 尾号匹配：两侧较短的一边 ≥ minMatch 位且尾部相同 */
 static BOOL OCMatch(NSString *a, NSString *b, int minMatch)
 {
@@ -253,7 +248,7 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
         @try { raw = [[call handle] value]; } @catch (id e) { raw = nil; }
         NSString *d = OCDigits(raw);
 
-        if (d.length <= 5) return %orig;                     /* 短号/急呼放行 */
+        if (d.length <= 5) return %orig;      /* 短号/急呼一律放行 */                     /* 短号/急呼放行 */
 
         BOOL known = NO;
         if (oc_wl_loaded)
