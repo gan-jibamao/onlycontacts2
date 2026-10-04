@@ -6,6 +6,8 @@
 	<dict>
 		<key>cell</key>
 		<string>PSLinkCell</string>
+		<key>icon</key>
+		<string>/Library/PreferenceLoader/Preferences/OnlyContacts.png</string>
 		<key>isController</key>
 		<true/>
 		<key>label</key>
