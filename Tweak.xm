@@ -119,15 +119,6 @@ static NSString *OCDigits(NSString *in)
     return out;
 }
 
-/* 尾号匹配（非索引路径用）：两侧较短的一边 ≥ minMatch 位且尾部相同 */
-static BOOL OCMatch(NSString *a, NSString *b, int minMatch)
-{
-    if (!a.length || !b.length) return NO;
-    NSUInteger k = MIN(a.length, b.length);
-    if ((int)k < minMatch) return NO;
-    return [a compare:b options:NSBackwardsSearch range:NSMakeRange(a.length - k, k)] == NSOrderedSame;
-}
-
 #pragma mark - 白名单（直读通讯录库 + 尾号索引 O(1)）
 
 static NSArray *oc_wl;                  /* 原始号码（诊断用） */
@@ -236,20 +227,18 @@ static dispatch_queue_t oc_logq;
 static NSDateFormatter *oc_df;
 static NSString *oc_log_path;
 
-static NSString *OCLogPath(void)
+static void OCLogInit(void)
 {
-    if (oc_log_path) return oc_log_path;
     NSString *jb = OCPJbRoot();
     NSString *rel = @"/var/mobile/Library/Logs/onlycontacts.log";
     if (jb.length) {
         NSString *p = [jb stringByAppendingString:rel];
         [[NSFileManager defaultManager] createDirectoryAtPath:[p stringByDeletingLastPathComponent]
                                   withIntermediateDirectories:YES attributes:nil error:nil];
-        if ([NSFileManager.defaultManager isWritableFileAtPath:p] ||
-            [NSFileManager.defaultManager isWritableFileAtPath:[p stringByDeletingLastPathComponent]])
-            return oc_log_path = p;
+        if ([NSFileManager.defaultManager isWritableFileAtPath:[p stringByDeletingLastPathComponent]])
+            oc_log_path = p;
     }
-    return oc_log_path = rel;
+    if (!oc_log_path) oc_log_path = rel;
 }
 
 static void OCLog(NSString *fmt, ...)
@@ -364,6 +353,7 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
     oc_df.dateFormat = @"yyyy-MM-dd HH:mm:ss";
     oc_df.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:8 * 3600];
     oc_logq = dispatch_queue_create("com.rna.onlycontacts.log", DISPATCH_QUEUE_SERIAL);
+    OCLogInit();
     OCReloadConfig();
     OCMaybeReloadWhitelist(YES);
     OCLog(@"BOOT|OnlyContacts 2.0.1 pid=%d proc=%s wl=%lu", getpid(), getprogname(),
