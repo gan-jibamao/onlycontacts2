@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <sqlite3.h>
 #import <dlfcn.h>
+#import <mach-o/dyld.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
