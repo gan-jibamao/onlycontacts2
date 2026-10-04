@@ -340,51 +340,7 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
 
 %end
 
-/* ---------- 诊断网：所有过滤候选全挂日志（纯放行） ---------- */
-
-%hook CSDBlockedCallFilter
-- (BOOL)shouldFilterIncomingCall:(id)call {
-    OCLog(@"DIAG|CSDBlocked.shouldFilter");
-    return %orig;
-}
-- (BOOL)shouldRestrictAddresses:(NSArray *)a forBundleIdentifier:(id)b performSynchronously:(BOOL)s {
-    OCLog(@"DIAG|CSDBlocked.shouldRestrict n=%lu", (unsigned long)a.count);
-    return %orig;
-}
-%end
-
-%hook CSDUnknownCallFilter
-- (BOOL)shouldFilterIncomingCall:(id)call {
-    OCLog(@"DIAG|CSDUnknown.shouldFilter");
-    return %orig;
-}
-- (BOOL)isUnknownCall:(id)call {
-    OCLog(@"DIAG|CSDUnknown.isUnknownCall");
-    return %orig;
-}
-%end
-
-%hook CSDContactsCallFilter
-- (BOOL)isUnknownCall:(id)call {
-    OCLog(@"DIAG|CSDContacts.isUnknownCall");
-    return %orig;
-}
-- (BOOL)isUnknownAddress:(id)a normalizedAddress:(id)b forBundleIdentifier:(id)c {
-    OCLog(@"DIAG|CSDContacts.isUnknownAddress");
-    return %orig;
-}
-%end
-
-%hook CSDIncomingCallFilter
-- (BOOL)callDirectoryAllowsCallFromSourceAddress:(id)a countryCode:(id)cc {
-    OCLog(@"DIAG|Incoming.callDirectoryAllows %@ cc=%@", a, cc);
-    return %orig;
-}
-- (BOOL)callDirectoryAllowsCallFromSourceAddress:(id)a {
-    OCLog(@"DIAG|Incoming.callDirectoryAllows1");
-    return %orig;
-}
-%end
+/* ---------- 空段（诊断网已移除，主闸门在上面） ---------- */
 
 %ctor {
     oc_ring = [NSMutableDictionary new];

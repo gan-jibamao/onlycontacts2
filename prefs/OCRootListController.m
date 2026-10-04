@@ -1,27 +1,34 @@
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
 
-/* Preferences.framework 私有头（theos 不带，手写用到的部分） */
-@interface PSListController : UIViewController
-- (NSArray *)specifiers;
-- (NSArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
-@end
+#define kPrefPath @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"
 
 @interface OCRootListController : PSListController
 @end
 
 @implementation OCRootListController
 
-/*
- * 显式从 Root.plist 加载：不依赖 PSListController 的默认路径。
- * 默认路径在 bundle 懒加载场景下可能拿不到 specifiers（表现为点进去空白），
- * 这里兜底：先走默认，空了就显式读 Root.plist。
- */
-- (NSArray *)specifiers
-{
-    NSArray *s = [super specifiers];
-    if (s.count) return s;
-    return [self loadSpecifiersFromPlistName:@"Root" target:self];
+- (id)readPreferenceValue:(PSSpecifier *)specifier {
+    NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/%@.plist",
+                      specifier.properties[@"defaults"]];
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    [settings addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:path]];
+    return (settings[specifier.properties[@"key"]]) ?: specifier.properties[@"default"];
+}
+
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/%@.plist",
+                      specifier.properties[@"defaults"]];
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    [settings addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:path]];
+    [settings setObject:value forKey:specifier.properties[@"key"]];
+    [settings writeToFile:path atomically:YES];
+
+    CFStringRef notificationName = (__bridge CFStringRef)specifier.properties[@"PostNotification"];
+    if (notificationName) {
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                             notificationName, NULL, NULL, YES);
+    }
 }
 
 @end
