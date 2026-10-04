@@ -17,6 +17,16 @@
 @end
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
+
+/* 配置（读/写 jbroot 里的偏好 plist） */
+static BOOL  cfg_enabled   = YES;
+static int   cfg_mode      = 0;
+static BOOL  cfg_repeat    = NO;
+static int   cfg_window    = 180;
+static int   cfg_minmatch  = 7;
+static BOOL  cfg_noid      = YES;
+static BOOL  cfg_restrict  = YES;
+static BOOL  cfg_log       = YES;
 #define OC_DEBUG_FILE @"/var/mobile/Documents/oc-prefs-debug.txt"
 
 #pragma mark - jbroot
