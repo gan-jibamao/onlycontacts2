@@ -1,3 +1,7 @@
+export THEOS_BUILD_DIR = ..
+
+include $(THEOS)/makefiles/common.mk
+
 BUNDLE_NAME = OnlyContactsPrefs
 OnlyContactsPrefs_FILES = OCRootListController.m
 OnlyContactsPrefs_CFLAGS = -fobjc-arc
