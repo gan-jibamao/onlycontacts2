@@ -7,7 +7,6 @@
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
 
-/* callservicesd 私有类（只声明我们用到的部分） */
 @interface CSDCall : NSObject
 @property (nonatomic, readonly, strong) id handle;
 @end
@@ -16,7 +15,7 @@
 @property (readonly, nonatomic) NSMutableArray *filters;
 @end
 
-#pragma mark - jbroot（roothide 的越狱根，从已加载映像的路径反推）
+#pragma mark - jbroot（从已加载映像的路径反推）
 
 static NSString *OCPJbRoot(void)
 {
@@ -40,24 +39,10 @@ static NSString *OCPJbRoot(void)
     return jb;
 }
 
-/* 同一个逻辑文件的几个候选落点（roothide 会把 /var/mobile 的偏好重定向进 jbroot） */
-static NSArray *OCConfigCandidates(void)
-{
-    NSString *jb = OCPJbRoot();
-    NSString *rel = @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist";
-    NSMutableArray *a = [NSMutableArray array];
-    if (jb.length) {
-        [a addObject:[jb stringByAppendingString:@"/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
-        [a addObject:[jb stringByAppendingString:@"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
-    }
-    [a addObject:rel];
-    return a;
-}
-
 #pragma mark - 配置
 
 static BOOL  cfg_enabled   = YES;
-static int   cfg_mode      = 0;      /* 0=block 1=silence */
+static int   cfg_mode      = 0;
 static BOOL  cfg_repeat    = NO;
 static int   cfg_window    = 180;
 static int   cfg_minmatch  = 7;
@@ -82,7 +67,15 @@ static void OCApplyConfig(NSDictionary *d)
 
 static void OCReloadConfig(void)
 {
-    for (NSString *p in OCConfigCandidates()) {
+    NSString *jb = OCPJbRoot();
+    NSString *rel = @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist";
+    NSMutableArray *c = [NSMutableArray array];
+    if (jb.length) {
+        [c addObject:[jb stringByAppendingString:@"/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
+        [c addObject:[jb stringByAppendingString:@"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
+    }
+    [c addObject:rel];
+    for (NSString *p in c) {
         NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:p];
         if (!d.count) continue;
         OCApplyConfig(d);
@@ -90,7 +83,6 @@ static void OCReloadConfig(void)
     }
 }
 
-/* 过期就丢后台重读，主路径永不阻塞 */
 static void OCMaybeReloadConfig(void)
 {
     static NSDate *last;
@@ -119,11 +111,11 @@ static NSString *OCDigits(NSString *in)
     return out;
 }
 
-#pragma mark - 白名单（直读通讯录库 + 尾号索引 O(1)）
+#pragma mark - 白名单
 
-static NSArray *oc_wl;                  /* 原始号码（诊断用） */
-static NSSet   *oc_wl_tail;             /* 末 minmatch 位索引 */
-static NSSet   *oc_wl_full;             /* 全号精确匹配（兜住比 minmatch 还短的联系人号码） */
+static NSArray *oc_wl;
+static NSSet   *oc_wl_tail;
+static NSSet   *oc_wl_full;
 static int      oc_wl_built_with = -1;
 static BOOL     oc_wl_loaded = NO;
 
@@ -155,10 +147,9 @@ static void OCReloadWhitelist(void)
     }
     oc_wl = out;
     oc_wl_loaded = YES;
-    oc_wl_built_with = -1;   /* 让索引按当前 minmatch 重建 */
+    oc_wl_built_with = -1;
 }
 
-/* O(1) 查询：尾号索引 + 全号精确匹配（兜住比 minmatch 还短的联系人号码） */
 static BOOL OCInWhitelist(NSString *d)
 {
     if (!oc_wl_loaded || !d.length) return NO;
@@ -193,7 +184,7 @@ static void OCMaybeReloadWhitelist(BOOL force)
     });
 }
 
-#pragma mark - 重复来电窗口（线程安全 + 有上限）
+#pragma mark - 重复来电窗口
 
 static NSMutableDictionary *oc_ring;
 
@@ -209,7 +200,7 @@ static void OCMarkSeen(NSString *d)
     if (!d.length) return;
     @synchronized (oc_ring) {
         oc_ring[d] = [NSDate date];
-        if (oc_ring.count > 128) {                  /* 有上限，不泄漏 */
+        if (oc_ring.count > 128) {
             NSString *oldest = nil;
             NSDate *oldestT = nil;
             for (NSString *k in oc_ring) {
@@ -221,56 +212,53 @@ static void OCMarkSeen(NSString *d)
     }
 }
 
-#pragma mark - 日志（后台串行写，不占来电路径）
+#pragma mark - 日志（多落点 + 后台串行）
 
 static dispatch_queue_t oc_logq;
 static NSDateFormatter *oc_df;
-static NSString *oc_log_path;
+static NSArray *oc_log_paths;
 
-static void OCLogInit(void)
+static void OCLogInitPaths(void)
 {
     NSString *jb = OCPJbRoot();
+    NSMutableArray *a = [NSMutableArray array];
     NSString *rel = @"/var/mobile/Library/Logs/onlycontacts.log";
     if (jb.length) {
-        NSString *p = [jb stringByAppendingString:rel];
-        [[NSFileManager defaultManager] createDirectoryAtPath:[p stringByDeletingLastPathComponent]
-                                  withIntermediateDirectories:YES attributes:nil error:nil];
-        if ([NSFileManager.defaultManager isWritableFileAtPath:[p stringByDeletingLastPathComponent]])
-            oc_log_path = p;
+        [a addObject:[jb stringByAppendingString:@"/private/var/mobile/Library/Logs/onlycontacts.log"]];
+        [a addObject:[jb stringByAppendingString:@"/var/mobile/Library/Logs/onlycontacts.log"]];
     }
-    if (!oc_log_path) oc_log_path = rel;
+    [a addObject:rel];
+    [a addObject:@"/var/mobile/Documents/onlycontacts.log"];
+    oc_log_paths = a;
 }
 
 static void OCLog(NSString *fmt, ...)
 {
-    if (!cfg_log || !oc_logq) return;
+    if (!oc_logq) return;
     va_list ap; va_start(ap, fmt);
     NSString *body = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
     dispatch_async(oc_logq, ^{
-        NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:oc_log_path];
-        if (!fh) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:[oc_log_path stringByDeletingLastPathComponent]
+        for (NSString *p in oc_log_paths) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:[p stringByDeletingLastPathComponent]
                                       withIntermediateDirectories:YES attributes:nil error:nil];
-            [NSFileManager.defaultManager createFileAtPath:oc_log_path contents:nil attributes:nil];
-            fh = [NSFileHandle fileHandleForWritingAtPath:oc_log_path];
-        }
-        if (!fh) return;
-        [fh seekToEndOfFile];
-        [fh writeData:[[NSString stringWithFormat:@"%@|%@\n", [oc_df stringFromDate:[NSDate date]], body]
-                       dataUsingEncoding:NSUTF8StringEncoding]];
-        [fh closeFile];
-        NSDictionary *attr = [NSFileManager.defaultManager attributesOfItemAtPath:oc_log_path error:nil];
-        if (attr && [attr fileSize] > 512 * 1024) {
+            NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:p];
+            if (!fh) {
+                [NSFileManager.defaultManager createFileAtPath:p contents:nil attributes:nil];
+                fh = [NSFileHandle fileHandleForWritingAtPath:p];
+            }
+            if (!fh) continue;
+            [fh seekToEndOfFile];
+            [fh writeData:[[NSString stringWithFormat:@"%@|%@\n",
+                            [oc_df stringFromDate:[NSDate date]], body] dataUsingEncoding:NSUTF8StringEncoding]];
             [fh closeFile];
-            [NSFileManager.defaultManager removeItemAtPath:oc_log_path error:nil];
         }
     });
 }
 
-#pragma mark - 系统通讯录匹配（缓存过滤器对象）
+#pragma mark - 系统通讯录匹配
 
-static id oc_cfilter;   /* CSDContactsCallFilter，找到一次就缓存 */
+static id oc_cfilter;
 
 static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
 {
@@ -279,15 +267,14 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
         for (id f in controller.filters)
             if ([f respondsToSelector:sel]) { oc_cfilter = f; break; }
     }
-    if (!oc_cfilter) return NO;              /* 问不到 → 交给白名单兜底 */
+    if (!oc_cfilter) return NO;
     return ((BOOL (*)(id, SEL, id))objc_msgSend)(oc_cfilter, sel, call);
 }
 
-#pragma mark - Hook
+#pragma mark - 主闸门（保留拦截逻辑）
 
 %hook CSDCallFilterController
 
-/* 主闸门：陌生号码不响铃、不进通话 */
 - (BOOL)shouldFilterIncomingCall:(CSDCall *)call
 {
     @try {
@@ -299,10 +286,10 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
         @try { raw = [[call handle] value]; } @catch (id e) { raw = nil; }
         NSString *d = OCDigits(raw);
 
-        if (d.length <= 5) return %orig;                 /* 短号/急呼一律放行 */
+        if (d.length <= 5) return %orig;
 
         BOOL known = OCInWhitelist(d);
-        if (!known && !OCSysUnknown(self, call)) known = YES;   /* 系统说认识 */
+        if (!known && !OCSysUnknown(self, call)) known = YES;
 
         if (known) return %orig;
         if (cfg_repeat && OCSeenRecently(d)) {
@@ -310,33 +297,30 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
             return %orig;
         }
         OCMarkSeen(d);
-        OCLog(@"BLK|%@ 不在通讯录 → 过滤（mode=%d）", d, cfg_mode);
+        OCLog(@"BLK|%@ 主闸门拦截", d);
         return YES;
     } @catch (NSException *e) {
-        OCLog(@"ERR|%@", e);
+        OCLog(@"ERR|main %@", e);
         return %orig;
     }
 }
 
-/*
- * restrict 闸门：让陌生号码**真的被拒接**（对方听忙音），不只是不响铃。
- * 安全护栏：只有 10 秒内真的打进来过的号码才允许被拒接——你回拨陌生号码不会被误伤。
- */
+/* restrict 闸门：10 秒护栏内真拒接 */
 - (BOOL)shouldRestrictAddresses:(NSArray *)addresses
           forBundleIdentifier:(NSString *)bundle
        performSynchronously:(BOOL)sync
 {
     @try {
+        OCLog(@"DIAG|CTRL.shouldRestrict n=%lu bundle=%@", (unsigned long)addresses.count, bundle);
         if (!cfg_enabled || !cfg_restrict) return %orig;
         OCMaybeReloadWhitelist(NO);
         if (!oc_wl_loaded) return %orig;
-
         for (id a in addresses) {
             NSString *d = OCDigits([a respondsToSelector:@selector(value)] ? [a value] : a);
-            if (!d.length || d.length <= 5) continue;    /* 急呼不拦 */
+            if (!d.length || d.length <= 5) continue;
             if (OCInWhitelist(d)) continue;
-            if (!OCSeenRecently(d)) continue;            /* 不是刚打进来的，不拒 */
-            OCLog(@"RST|%@ 真被拒接（对方听忙音）", d);
+            if (!OCSeenRecently(d)) continue;
+            OCLog(@"RST|%@ 真被拒接", d);
             return YES;
         }
         return %orig;
@@ -345,6 +329,61 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
     }
 }
 
+/* 诊断：系统自己的判定 */
+- (BOOL)isUnknownCall:(CSDCall *)call
+{
+    BOOL r = %orig;
+    NSString *d = OCDigits([[call handle] value]);
+    OCLog(@"DIAG|CTRL.isUnknown(%@)=%d mywl=%d", d, r, OCInWhitelist(d) ? 1 : 0);
+    return r;
+}
+
+%end
+
+/* ---------- 诊断网：所有过滤候选全挂日志（纯放行） ---------- */
+
+%hook CSDBlockedCallFilter
+- (BOOL)shouldFilterIncomingCall:(id)call {
+    OCLog(@"DIAG|CSDBlocked.shouldFilter");
+    return %orig;
+}
+- (BOOL)shouldRestrictAddresses:(NSArray *)a forBundleIdentifier:(id)b performSynchronously:(BOOL)s {
+    OCLog(@"DIAG|CSDBlocked.shouldRestrict n=%lu", (unsigned long)a.count);
+    return %orig;
+}
+%end
+
+%hook CSDUnknownCallFilter
+- (BOOL)shouldFilterIncomingCall:(id)call {
+    OCLog(@"DIAG|CSDUnknown.shouldFilter");
+    return %orig;
+}
+- (BOOL)isUnknownCall:(id)call {
+    OCLog(@"DIAG|CSDUnknown.isUnknownCall");
+    return %orig;
+}
+%end
+
+%hook CSDContactsCallFilter
+- (BOOL)isUnknownCall:(id)call {
+    OCLog(@"DIAG|CSDContacts.isUnknownCall");
+    return %orig;
+}
+- (BOOL)isUnknownAddress:(id)a normalizedAddress:(id)b forBundleIdentifier:(id)c {
+    OCLog(@"DIAG|CSDContacts.isUnknownAddress");
+    return %orig;
+}
+%end
+
+%hook CSDIncomingCallFilter
+- (BOOL)callDirectoryAllowsCallFromSourceAddress:(id)a countryCode:(id)cc {
+    OCLog(@"DIAG|Incoming.callDirectoryAllows %@ cc=%@", a, cc);
+    return %orig;
+}
+- (BOOL)callDirectoryAllowsCallFromSourceAddress:(id)a {
+    OCLog(@"DIAG|Incoming.callDirectoryAllows1");
+    return %orig;
+}
 %end
 
 %ctor {
@@ -353,10 +392,11 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
     oc_df.dateFormat = @"yyyy-MM-dd HH:mm:ss";
     oc_df.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:8 * 3600];
     oc_logq = dispatch_queue_create("com.rna.onlycontacts.log", DISPATCH_QUEUE_SERIAL);
-    OCLogInit();
+    OCLogInitPaths();
     OCReloadConfig();
     OCMaybeReloadWhitelist(YES);
-    OCLog(@"BOOT|OnlyContacts 2.0.1 pid=%d proc=%s wl=%lu", getpid(), getprogname(),
+    OCLog(@"BOOT|2.1-diag pid=%d proc=%s jbroot=%@ wl=%lu",
+          getpid(), getprogname(), OCPJbRoot() ?: @"(none)",
           (unsigned long)(oc_wl ? oc_wl.count : 0));
     %init;
 }
