@@ -22,9 +22,7 @@ jobs:
           git clone --recursive --depth 1 https://github.com/roothide/theos.git $THEOS
           rm -rf $THEOS/sdks
           git clone --depth 1 https://github.com/theos/sdks.git $THEOS/sdks
-          git clone --depth 1 https://github.com/ProcursusTeam/ldid.git /tmp/ldid
-          make -C /tmp/ldid -j4 >/dev/null 2>&1
-          cp /tmp/ldid/ldid $THEOS/bin/ldid && chmod +x $THEOS/bin/ldid
+          brew install ldid
           echo "THEOS=$THEOS" >> $GITHUB_ENV
 
       - name: Build (${{ matrix.scheme }})
