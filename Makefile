@@ -5,7 +5,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = OnlyContacts
 OnlyContacts_FILES = Tweak.xm
-OnlyContacts_CFLAGS = -fobjc-arc
+OnlyContacts_CFLAGS = -fobjc-arc -I$(THEOS_PROJECT_DIR)
 OnlyContacts_FRAMEWORKS = Foundation
 OnlyContacts_LIBRARIES = sqlite3
 

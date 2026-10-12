@@ -4,6 +4,7 @@
 #import <mach-o/dyld.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import "OCPrefPath.h"
 
 #define OC_DOMAIN @"com.rna.onlycontacts"
 
@@ -49,6 +50,7 @@ static int   cfg_minmatch  = 7;
 static BOOL  cfg_noid      = YES;
 static BOOL  cfg_restrict  = YES;
 static BOOL  cfg_log       = YES;
+static NSString *cfg_redirect = @"";
 
 static void OCApplyConfig(NSDictionary *d)
 {
@@ -61,21 +63,14 @@ static void OCApplyConfig(NSDictionary *d)
     cfg_noid     = d[@"allow_unknown_id"]  ? [d[@"allow_unknown_id"] boolValue] : YES;
     cfg_restrict = d[@"restrict_gate"]     ? [d[@"restrict_gate"] boolValue]    : YES;
     cfg_log      = d[@"log"]               ? [d[@"log"] boolValue]              : YES;
+    cfg_redirect = d[@"redirect_number"]   ? [d[@"redirect_number"] description] : @"";
     if (cfg_minmatch < 4)  cfg_minmatch = 4;
     if (cfg_minmatch > 15) cfg_minmatch = 15;
 }
 
 static void OCReloadConfig(void)
 {
-    NSString *jb = OCPJbRoot();
-    NSString *rel = @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist";
-    NSMutableArray *c = [NSMutableArray array];
-    if (jb.length) {
-        [c addObject:[jb stringByAppendingString:@"/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
-        [c addObject:[jb stringByAppendingString:@"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
-    }
-    [c addObject:rel];
-    for (NSString *p in c) {
+    for (NSString *p in OCPrefReadPaths()) {
         NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:p];
         if (!d.count) continue;
         OCApplyConfig(d);
@@ -297,7 +292,8 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
             return %orig;
         }
         OCMarkSeen(d);
-        OCLog(@"BLK|%@ 主闸门拦截", d);
+        OCLog(@"BLK|%@ 主闸门拦截（遇忙转移目标=%@）", d,
+              cfg_redirect.length ? cfg_redirect : @"(未设置)");
         return YES;
     } @catch (NSException *e) {
         OCLog(@"ERR|main %@", e);
@@ -349,10 +345,12 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
     oc_df.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:8 * 3600];
     oc_logq = dispatch_queue_create("com.rna.onlycontacts.log", DISPATCH_QUEUE_SERIAL);
     OCLogInitPaths();
+    OCMigratePrefs();
     OCReloadConfig();
     OCMaybeReloadWhitelist(YES);
-    OCLog(@"BOOT|2.1-diag pid=%d proc=%s jbroot=%@ wl=%lu",
+    OCLog(@"BOOT|3.0.0 pid=%d proc=%s jbroot=%@ wl=%lu redirect=%@",
           getpid(), getprogname(), OCPJbRoot() ?: @"(none)",
-          (unsigned long)(oc_wl ? oc_wl.count : 0));
+          (unsigned long)(oc_wl ? oc_wl.count : 0),
+          cfg_redirect.length ? cfg_redirect : @"(none)");
     %init;
 }

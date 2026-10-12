@@ -138,6 +138,62 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>陌生号码被拒接后，让对方响「忙音」——再把被拒的呼叫自动转到一个号码（比如停机号/空号）。设置走系统同款通道，和「设置→电话→呼叫转移」里改的是一回事。</string>
+			<key>label</key>
+			<string>呼叫转移（自动化）</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.rna.onlycontacts/prefsChanged</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string></string>
+			<key>defaults</key>
+			<string>com.rna.onlycontacts</string>
+			<key>id</key>
+			<string>oc_redirect_number</string>
+			<key>key</key>
+			<string>redirect_number</string>
+			<key>keyboard</key>
+			<string>NumbersAndPunctuation</string>
+			<key>label</key>
+			<string>停机号（转移目标）</string>
+			<key>placeholder</key>
+			<string>要转移到的号码</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>action</key>
+			<string>ocApplyForwarding:</string>
+			<key>label</key>
+			<string>一键设置遇忙转移</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>action</key>
+			<string>ocDisableForwarding:</string>
+			<key>label</key>
+			<string>关闭遇忙转移</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>手动设置（备用，两边都能用）：
+开启遇忙转移：拨号盘输入 **67*停机号# 然后按拨出
+关闭遇忙转移：拨号盘输入 ##67# 然后按拨出
+取消所有转移：拨号盘输入 ##002# 然后按拨出
+注：遇忙转移需要运营商支持（一般免费）。</string>
+			<key>label</key>
+			<string>备用：拨号盘代码</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>“真的拒接”用的是 restrict 闸门，只有 10 秒内真的打进来过的号码才会被拒接——你回拨陌生号码不会被误伤。</string>
 			<key>label</key>
 			<string>高级</string>
