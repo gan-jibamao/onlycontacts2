@@ -348,7 +348,7 @@ static BOOL OCSysUnknown(CSDCallFilterController *controller, id call)
     OCMigratePrefs();
     OCReloadConfig();
     OCMaybeReloadWhitelist(YES);
-    OCLog(@"BOOT|3.0.0 pid=%d proc=%s jbroot=%@ wl=%lu redirect=%@",
+    OCLog(@"BOOT|3.1.0 pid=%d proc=%s jbroot=%@ wl=%lu redirect=%@",
           getpid(), getprogname(), OCPJbRoot() ?: @"(none)",
           (unsigned long)(oc_wl ? oc_wl.count : 0),
           cfg_redirect.length ? cfg_redirect : @"(none)");

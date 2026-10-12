@@ -1,6 +1,6 @@
 Package: com.rna.onlycontacts
 Name: OnlyContacts
-Version: 3.0.0
+Version: 3.1.0
 Architecture: iphoneos-arm64e
 Description: 只允许通讯录里的号码呼入；陌生号码直接打不进，并可由运营商「遇忙转移」把它们转走（一键设置，注入 callservicesd 的来电过滤器）。
 Maintainer: RNA

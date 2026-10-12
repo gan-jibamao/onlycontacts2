@@ -16,10 +16,17 @@
 #import <mach-o/dyld.h>
 #import <unistd.h>
 
-#define OC_PREFS_FILENAME   @"com.rna.onlycontacts.plist"
-#define OC_DYLIB_REL_PATH   @"Library/MobileSubstrate/DynamicLibraries/OnlyContacts.dylib"
-#define OC_PREFS_REAL_PATH  @"/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"
-#define OC_PREFS_JB_REL     @"var/mobile/Library/Preferences/com.rna.onlycontacts.plist"
+/* 运行时字符串构造：规避 RootHide 对静态 __cfstring 的重映射（SIGBUS 防护）。
+   与 CPUthermal 面板（同设备已验证）同款防御：凡是路径/通知/域名串，
+   一律 C 字符串 + runtime 构造，不落静态 __CFString。 */
+#ifndef OC_S
+#define OC_S(str) [NSString stringWithUTF8String:(str)]
+#endif
+
+#define OC_PREFS_FILENAME   OC_S("com.rna.onlycontacts.plist")
+#define OC_DYLIB_REL_PATH   OC_S("Library/MobileSubstrate/DynamicLibraries/OnlyContacts.dylib")
+#define OC_PREFS_REAL_PATH  OC_S("/var/mobile/Library/Preferences/com.rna.onlycontacts.plist")
+#define OC_PREFS_JB_REL     OC_S("var/mobile/Library/Preferences/com.rna.onlycontacts.plist")
 
 #pragma mark - 隐根发现
 
@@ -30,10 +37,10 @@ static inline NSString *OCPathFromDyld(void) {
         const char *p = _dyld_get_image_name(i);
         if (!p) continue;
         NSString *path = [NSString stringWithUTF8String:p];
-        NSRange r = [path rangeOfString:@"/.jbroot-"];
+        NSRange r = [path rangeOfString:OC_S("/.jbroot-")];
         if (r.location == NSNotFound) continue;
         NSRange rest = NSMakeRange(r.location + 1, path.length - r.location - 1);
-        NSRange slash = [path rangeOfString:@"/" options:0 range:rest];
+        NSRange slash = [path rangeOfString:OC_S("/") options:0 range:rest];
         return (slash.location == NSNotFound) ? path
                                               : [path substringToIndex:slash.location];
     }
@@ -47,14 +54,14 @@ static inline NSArray *OCScanJbrootDirs(void) {
     NSMutableDictionary *mtime = [NSMutableDictionary dictionary];
     NSFileManager *fm = [NSFileManager defaultManager];
 
-    NSArray *subs = [fm contentsOfDirectoryAtPath:@"/var/mobile/Containers/Shared/AppGroup" error:nil];
+    NSArray *subs = [fm contentsOfDirectoryAtPath:OC_S("/var/mobile/Containers/Shared/AppGroup") error:nil];
     for (NSString *s in subs) {
-        if (![s hasPrefix:@".jbroot-"]) continue;
-        NSString *root = [@"/var/mobile/Containers/Shared/AppGroup" stringByAppendingPathComponent:s];
+        if (![s hasPrefix:OC_S(".jbroot-")]) continue;
+        NSString *root = [OC_S("/var/mobile/Containers/Shared/AppGroup") stringByAppendingPathComponent:s];
         long sc = 0;
         if ([fm fileExistsAtPath:[root stringByAppendingPathComponent:OC_DYLIB_REL_PATH]]) sc += 100;
-        if ([fm fileExistsAtPath:[root stringByAppendingPathComponent:@"Library/MobileSubstrate"]]) sc += 10;
-        if ([fm fileExistsAtPath:[root stringByAppendingPathComponent:@"usr/lib"]]) sc += 5;
+        if ([fm fileExistsAtPath:[root stringByAppendingPathComponent:OC_S("Library/MobileSubstrate")]]) sc += 10;
+        if ([fm fileExistsAtPath:[root stringByAppendingPathComponent:OC_S("usr/lib")]]) sc += 5;
         [dirs addObject:root];
         score[root] = @(sc);
         NSDictionary *attr = [fm attributesOfItemAtPath:root error:nil];
@@ -98,10 +105,10 @@ static inline NSArray *OCPrefReadPaths(void) {
     NSMutableArray *a = [NSMutableArray array];
     for (NSString *jb in OCScanJbrootDirs()) {
         [a addObject:[jb stringByAppendingPathComponent:OC_PREFS_JB_REL]];
-        [a addObject:[jb stringByAppendingPathComponent:@"private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"]];
+        [a addObject:[jb stringByAppendingPathComponent:OC_S("private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist")]];
     }
-    [a addObject:[@"/var/jb" stringByAppendingPathComponent:OC_PREFS_JB_REL]];
-    [a addObject:@"/var/jb/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist"];
+    [a addObject:[OC_S("/var/jb") stringByAppendingPathComponent:OC_PREFS_JB_REL]];
+    [a addObject:OC_S("/var/jb/private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist")];
     [a addObject:OC_PREFS_REAL_PATH];
     return a;
 }
@@ -112,8 +119,8 @@ static inline NSArray *OCWritePrefPaths(void) {
     NSString *jb = OCJbrootDir();
     if (jb.length)
         [a addObject:[jb stringByAppendingPathComponent:OC_PREFS_JB_REL]];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"])
-        [a addObject:[@"/var/jb" stringByAppendingPathComponent:OC_PREFS_JB_REL]];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:OC_S("/var/jb")])
+        [a addObject:[OC_S("/var/jb") stringByAppendingPathComponent:OC_PREFS_JB_REL]];
     [a addObject:OC_PREFS_REAL_PATH];
     return a;
 }
@@ -213,13 +220,13 @@ static inline NSArray *OCResolvePaths(NSString *rel) {
     NSMutableArray *a = [NSMutableArray array];
     for (NSString *jb in OCScanJbrootDirs()) {
         [a addObject:[jb stringByAppendingPathComponent:rel]];
-        [a addObject:[jb stringByAppendingPathComponent:[@"private/" stringByAppendingString:rel]]];
+        [a addObject:[jb stringByAppendingPathComponent:[OC_S("private/") stringByAppendingString:rel]]];
     }
-    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
-        [a addObject:[@"/var/jb" stringByAppendingPathComponent:rel]];
-        [a addObject:[@"/var/jb" stringByAppendingPathComponent:[@"private/" stringByAppendingString:rel]]];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:OC_S("/var/jb")]) {
+        [a addObject:[OC_S("/var/jb") stringByAppendingPathComponent:rel]];
+        [a addObject:[OC_S("/var/jb") stringByAppendingPathComponent:[OC_S("private/") stringByAppendingString:rel]]];
     }
-    [a addObject:[@"/" stringByAppendingPathComponent:rel]];
+    [a addObject:[OC_S("/") stringByAppendingPathComponent:rel]];
     return a;
 }
 
