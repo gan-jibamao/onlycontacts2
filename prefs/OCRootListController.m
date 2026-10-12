@@ -131,7 +131,6 @@ static NSString *const kOCPrefsChangedNotification = @"com.rna.onlycontacts/pref
     /* 先把键盘收起来，保证输入框内容已提交进偏好 */
     [self.view endEditing:YES];
 
-    NSString *action = enable ? @"设置遇忙转移" : @"关闭遇忙转移";
     __weak __typeof(self) weakSelf = self;
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
