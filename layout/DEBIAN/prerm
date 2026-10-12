@@ -1,0 +1,4 @@
+#!/bin/sh
+# OnlyContacts 3.0.0 prerm
+# 卸载前：让 callservicesd 恢复（新会话会自然丢弃旧 dylib）
+exit 0

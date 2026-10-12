@@ -1,0 +1,41 @@
+#!/bin/sh
+# OnlyContacts 3.0.0 postinst
+# 目标：装上即用 —— 无需重启设备，自动让 callservicesd 重新载入 dylib；修正权限
+
+# ---- rootless（/var/jb）分支 ----
+if [ -d /var/jb/Library/MobileSubstrate/DynamicLibraries ]; then
+    chmod 0644 /var/jb/Library/MobileSubstrate/DynamicLibraries/OnlyContacts.plist 2>/dev/null
+    chmod 0755 /var/jb/Library/MobileSubstrate/DynamicLibraries/OnlyContacts.dylib 2>/dev/null
+    chmod 0755 /var/jb/Library/PreferenceBundles/OnlyContactsPrefs.bundle/OnlyContactsPrefs 2>/dev/null
+    chmod 0644 /var/jb/Library/PreferenceLoader/Preferences/OnlyContactsPrefs.plist 2>/dev/null
+fi
+
+# ---- roothide（根）分支 ----
+if [ -d /Library/MobileSubstrate/DynamicLibraries ]; then
+    chmod 0644 /Library/MobileSubstrate/DynamicLibraries/OnlyContacts.plist 2>/dev/null
+    chmod 0755 /Library/MobileSubstrate/DynamicLibraries/OnlyContacts.dylib 2>/dev/null
+    chmod 0755 /Library/PreferenceBundles/OnlyContactsPrefs.bundle/OnlyContactsPrefs 2>/dev/null
+    chmod 0644 /Library/PreferenceLoader/Preferences/OnlyContactsPrefs.plist 2>/dev/null
+fi
+
+# ---- 偏好文件属主修正（面板以 mobile 身份读写） ----
+for p in \
+    /var/mobile/Library/Preferences/com.rna.onlycontacts.plist \
+    /private/var/mobile/Library/Preferences/com.rna.onlycontacts.plist ; do
+    if [ -f "$p" ]; then
+        chown 501:501 "$p" 2>/dev/null
+        chmod 0644 "$p" 2>/dev/null
+    fi
+done
+
+# ---- 让 callservicesd 重新拉起（载入新 dylib） ----
+launchctl kickstart -k system/com.apple.callservicesd 2>/dev/null \
+  || killall -9 callservicesd 2>/dev/null \
+  || /usr/bin/killall -9 callservicesd 2>/dev/null \
+  || /var/jb/usr/bin/killall -9 callservicesd 2>/dev/null \
+  || true
+
+# ---- 用户空间重启提示（对 rootHide 的稳妥做法） ----
+echo "[OnlyContacts] 已安装。若设置面板里没有出现菜单，请注销后再进入（或重启用户空间）。"
+
+exit 0
