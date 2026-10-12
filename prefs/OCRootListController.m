@@ -166,6 +166,12 @@ static void OCPanelLog(NSString *fmt, ...) {
     [self ocSetSpecifierAction:b2 sel:@selector(ocDisableForwarding:)];
     [arr addObject:b2];
 
+    PSSpecifier *b3 = [PSSpecifier preferenceSpecifierNamed:S("拨码设置：**67*停机号# (遇忙)")
+                                                    target:self set:NULL get:NULL detail:nil
+                                                      cell:PSButtonCell edit:nil];
+    [self ocSetSpecifierAction:b3 sel:@selector(ocDialForwardingCode:)];
+    [arr addObject:b3];
+
     return arr;
 }
 
@@ -361,8 +367,16 @@ static void OCPanelLog(NSString *fmt, ...) {
             if (!self2) return;
             if (error) {
                 [self2 ocCancelPending];
-                NSString *msg = [NSString stringWithFormat:S("%@\n\n可以改用拨号盘手动设置（见本页底部代码）。"),
-                                 error.localizedDescription ?: S("未知错误")];
+                OCPanelLog(S("saveCallForwarding completion error: domain=%@ code=%ld desc=%@"),
+                           error.domain, (long)error.code, error.localizedDescription ?: S("(nil)"));
+                NSString *detail = [NSString stringWithFormat:S("[%@:%ld]"),
+                                    error.domain ?: S("?"), (long)error.code];
+                NSString *msg = [NSString stringWithFormat:
+                                 S("%@\n%@\n\n"
+                                   "这通常表示运营商侧没开通「呼叫转移」业务，或拒绝了这个请求。\n"
+                                   "中国电信：请先拨 10000 开通（免费），或到「中国电信」App 办理；\n"
+                                   "然后回到本页用上面的「拨码设置」按钮（拨号盘方式通常更稳）。"),
+                                 error.localizedDescription ?: S("未知错误"), detail];
                 [self2 ocAlert:S("设置失败") message:msg];
             }
             /* error == nil 时不动：等 delegate 事件 3 的成功回执 */
@@ -382,6 +396,78 @@ static void OCPanelLog(NSString *fmt, ...) {
 
 - (void)ocDisableForwarding:(PSSpecifier *)specifier {
     [self ocSendForwardingEnable:NO];
+}
+
+#pragma mark - 拨号盘拨码（绕过系统私有通道，直拨运营商 MMI 码）
+
+/* 把拨码送进电话 App 拨号盘（tel URL，用户点一下拨出即执行）。
+   MMI 码里的 # 必须 URL 编码为 %23。 */
+- (void)ocDialCode:(NSString *)code requiresNumber:(BOOL)requiresNumber {
+    [self.view endEditing:YES];
+    NSString *number = [self ocRedirectNumber];
+    if (requiresNumber && !number.length) {
+        [self ocAlert:S("先填停机号")
+               message:S("请先在「停机号（转移目标）」输入框里填好号码，再点这个拨码按钮。")];
+        return;
+    }
+    NSString *full = code;
+    if (requiresNumber) {
+        full = [code stringByReplacingOccurrencesOfString:S("*N#") withString:
+                [NSString stringWithFormat:S("*%@#"), number]];
+    }
+    NSString *encoded = [full stringByReplacingOccurrencesOfString:S("#") withString:S("%23")];
+    NSString *urlStr = [NSString stringWithFormat:S("tel:%@"), encoded];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    OCPanelLog(S("ocDialCode: %@"), full);
+    if (!url) {
+        [self ocAlert:S("拨码失败") message:full];
+        return;
+    }
+    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+        if (!success) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self ocAlert:S("没能呼起电话 App") message:[NSString stringWithFormat:
+                    S("请手动在拨号盘输入并拨出：\n\n%@"), full]];
+            });
+        }
+    }];
+}
+
+/* 遇忙转移设置码：**67*停机号# */
+- (void)ocDialForwardingCode:(PSSpecifier *)specifier {
+    [self ocDialCode:S("**67*N#") requiresNumber:YES];
+}
+
+/* 无应答转移设置码：**61*停机号# */
+- (void)ocDialNoReplyCode:(PSSpecifier *)specifier {
+    [self ocDialCode:S("**61*N#") requiresNumber:YES];
+}
+
+/* 取消遇忙转移码：##67# */
+- (void)ocDialDisableCode:(PSSpecifier *)specifier {
+    [self ocDialCode:S("##67#") requiresNumber:NO];
+}
+
+/* 复制全部设置码到剪贴板（含当前停机号） */
+- (void)ocCopyForwardingCode:(PSSpecifier *)specifier {
+    [self.view endEditing:YES];
+    NSString *number = [self ocRedirectNumber];
+    NSString *n = number.length ? number : S("停机号");
+    NSString *all = [NSString stringWithFormat:
+        S("遇忙转移（设置）：**67*%@#\n"
+          "遇忙转移（取消）：##67#\n"
+          "无应答转移（设置）：**61*%@#\n"
+          "无应答转移（取消）：##61#\n"
+          "不可及转移（设置）：**62*%@#\n"
+          "不可及转移（取消）：##62#\n"
+          "无条件转移（设置）：**21*%@#\n"
+          "无条件转移（取消）：##21#\n"
+          "取消所有转移：##002#"),
+        n, n, n, n];
+    [UIPasteboard generalPasteboard].string = all;
+    OCPanelLog(S("ocCopyForwardingCode: copied"));
+    [self ocAlert:S("已复制")
+           message:S("全部设置码已复制到剪贴板。\n\n到拨号盘粘贴、拨出即可（每条单独拨）。\n\n提示：电信未开通业务时，先打 10000 开通「呼叫转移」。")];
 }
 
 #pragma mark - CoreTelephony 回执（delegate 事件）
@@ -404,8 +490,11 @@ static void OCPanelLog(NSString *fmt, ...) {
         } else if (evt == 4) {
             if (!self->_ocAwaitingReply) return;
             [self ocCancelPending];
+            OCPanelLog(S("suppServicesEvent evt=4 set-error data=%@"), [data description] ?: S("(nil)"));
             [self ocAlert:S("设置没有成功")
-                   message:S("运营商侧拒绝了这次设置（可能没开通呼叫转移业务，或需要密码）。\n\n可以试试本页底部的拨号盘代码手动设置。")];
+                   message:S("运营商侧拒绝了这次设置（可能没开通呼叫转移业务，或需要密码）。\n\n"
+                             "中国电信：先拨 10000 免费开通「呼叫转移」，\n"
+                             "然后回来点上面的「拨码设置」按钮（拨号盘方式通常更稳）。")];
         }
     });
 }

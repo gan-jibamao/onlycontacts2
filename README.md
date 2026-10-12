@@ -1,4 +1,4 @@
-# OnlyContacts 3.0.0
+# OnlyContacts 3.2.0
 
 只让**通讯录里**的号码打进来；陌生号码直接打不进，并可由运营商「遇忙转移」把它们转走（可一键设置）。
 
@@ -20,8 +20,8 @@
 
 1. 装 PreferenceLoader（RootHide Bootstrap 一般自带）。
 2. 装对应架构的 deb：
-   - **A12 及以后（arm64e）**：`com.rna.onlycontacts_3.0.0_iphoneos-arm64e.deb`
-   - 其他（arm64）：`com.rna.onlycontacts_3.0.0_iphoneos-arm64.deb`
+   - **A12 及以后（arm64e）**：`com.rna.onlycontacts_3.2.0_iphoneos-arm64e.deb`
+   - 其他（arm64）：`com.rna.onlycontacts_3.2.0_iphoneos-arm64.deb`
 3. 安装后建议 `launchctl kickstart -k system/com.apple.callservicesd`（或重启一次）。
 
 ## 使用

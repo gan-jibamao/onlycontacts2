@@ -180,13 +180,45 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>action</key>
+			<string>ocDialForwardingCode:</string>
+			<key>label</key>
+			<string>拨码设置：**67*停机号# (遇忙)</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>action</key>
+			<string>ocDialNoReplyCode:</string>
+			<key>label</key>
+			<string>拨码设置：**61*停机号# (无应答)</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>action</key>
+			<string>ocDialDisableCode:</string>
+			<key>label</key>
+			<string>拨码关闭：##67# (取消遇忙)</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>action</key>
+			<string>ocCopyForwardingCode:</string>
+			<key>label</key>
+			<string>复制全部设置码（备用）</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>手动设置（备用，两边都能用）：
 开启遇忙转移：拨号盘输入 **67*停机号# 然后按拨出
 关闭遇忙转移：拨号盘输入 ##67# 然后按拨出
 取消所有转移：拨号盘输入 ##002# 然后按拨出
-注：遇忙转移需要运营商支持（一般免费）。</string>
+电信用户注意：若提示“业务未开通/不支持”，先打 10000 客服、或在中国电信 App「我的→业务办理→呼叫转移」开通业务（免费），之后拨码即生效。</string>
 			<key>label</key>
 			<string>备用：拨号盘代码</string>
 		</dict>
